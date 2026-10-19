@@ -1,0 +1,11 @@
+# Adjust these build directories to the student's actual solution layout.
+# The workflow sets IMAGE_NAME separately for each selected service.
+services:
+  frontend:
+    image: ${IMAGE_NAME:-wp1-frontend:local}
+    build: ./frontend
+    ports: ["8080:8080"]
+  api:
+    image: ${IMAGE_NAME:-wp1-api:local}
+    build: ./api
+    ports: ["8081:8080"]
