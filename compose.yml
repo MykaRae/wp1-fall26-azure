@@ -2,10 +2,10 @@
 # The workflow sets IMAGE_NAME separately for each selected service.
 services:
   frontend:
-    image: ${wp1/s09:-wp1-frontend:local}
+    image: ${wp1-s09-frontend:-wp1-frontend:local}
     build: ./frontend
     ports: ["8080:8080"]
   api:
-    image: ${wp1/s09:-wp1-api:local}
+    image: ${wp1-s09-api:-wp1-api:local}
     build: ./api
     ports: ["8081:8080"]
