@@ -54,7 +54,12 @@ jobs:
             state=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.provisioningState -o tsv)
             latest=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.latestRevisionName -o tsv)
             ready=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.latestReadyRevisionName -o tsv)
-            if [ "$state" = Failed ]; then echo 'Azure provisioning failed'; exit 1; fi
+            echo "API readiness poll $attempt/60: state=$state latest=$latest ready=$ready"
+            if [ "$state" = Failed ]; then
+              echo 'Azure provisioning failed; current revisions:'
+              az containerapp revision list -g "$RESOURCE_GROUP" -n "$API_APP" -o table
+              exit 1
+            fi
             if [ "$state" = Succeeded ] && [ -n "$latest" ] && [ "$latest" = "$ready" ]; then
               fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.configuration.ingress.fqdn -o tsv)
               if [ -z "$fqdn" ]; then echo 'API ingress URL is missing'; exit 1; fi
@@ -64,7 +69,9 @@ jobs:
             fi
             sleep 10
           done
-          echo 'API revision did not become ready; inspect Container Apps logs.'
+          echo "API revision did not become ready within 10 minutes: state=$state latest=$latest ready=$ready"
+          echo 'Current API revisions:'
+          az containerapp revision list -g "$RESOURCE_GROUP" -n "$API_APP" -o table
           exit 1
       - name: Build and push frontend
         run: |
