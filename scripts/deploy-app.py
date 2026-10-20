@@ -14,6 +14,7 @@ def main():
     for key in required:
         if not e.get(key):raise SystemExit('Missing setting '+key)
     if service=='api' and not e.get('SQL_CONNECTION_STRING'):raise SystemExit('Missing SQL_CONNECTION_STRING secret')
+    if service=='frontend' and not e.get('API_BASE_URL'):raise SystemExit('Missing API_BASE_URL')
     base=f'/subscriptions/{e["AZURE_SUBSCRIPTION_ID"]}/resourceGroups/{e["RESOURCE_GROUP"]}'
     name=e['FRONTEND_APP' if service=='frontend' else 'API_APP']
     identity=e['RUNTIME_IDENTITY_ID']
@@ -22,10 +23,12 @@ def main():
          {'name':'BlobServiceUri','value':e['BLOB_SERVICE_URI']},
          {'name':'BlobContainer','value':e['BLOB_CONTAINER']}]
     secrets=[]
+    if service=='frontend':
+        env.append({'name':'ApiBaseUrl','value':e['API_BASE_URL']})
     if service=='api':
         secrets=[{'name':'db-connection','value':e['SQL_CONNECTION_STRING']}]
         env.append({'name':'ConnectionStrings__DefaultConnection','secretRef':'db-connection'})
-    # Public API supports browser-based frontends; student must implement auth/CORS deliberately.
+    # The browser uses the frontend's same-origin proxy; the API call is server-to-server.
     doc={'location':'eastus2','identity':{'type':'UserAssigned','userAssignedIdentities':{identity:{}}},
       'properties':{'environmentId':base+'/providers/Microsoft.App/managedEnvironments/'+e['CONTAINER_ENVIRONMENT'],
         'workloadProfileName':'Consumption',

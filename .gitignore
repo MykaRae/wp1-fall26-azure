@@ -1,3 +1,7 @@
 s09-student-access.txt
 s09-github-variables.json
 s09-app-connection.txt
+
+**/bin/
+**/obj/
+.vs/

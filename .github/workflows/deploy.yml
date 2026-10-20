@@ -14,10 +14,6 @@ jobs:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [frontend, api]
     env:
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
@@ -29,8 +25,8 @@ jobs:
       RUNTIME_CLIENT_ID: ${{ vars.RUNTIME_CLIENT_ID }}
       BLOB_SERVICE_URI: ${{ vars.BLOB_SERVICE_URI }}
       BLOB_CONTAINER: ${{ vars.BLOB_CONTAINER }}
-      SERVICE: ${{ matrix.service }}
-      IMAGE_NAME: ${{ vars.ACR_SERVER }}/${{ vars.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
+      API_IMAGE: ${{ vars.ACR_SERVER }}/${{ vars.IMAGE_PREFIX }}/api:${{ github.sha }}
+      FRONTEND_IMAGE: ${{ vars.ACR_SERVER }}/${{ vars.IMAGE_PREFIX }}/frontend:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: azure/login@v2
@@ -42,21 +38,49 @@ jobs:
         env:
           ACR_NAME: ${{ vars.ACR_NAME }}
         run: az acr login --name "$ACR_NAME"
-      - name: Build and push selected service
+      - name: Build and push API
         run: |
-          docker compose -f compose.yml build "$SERVICE"
-          docker compose -f compose.yml push "$SERVICE"
-      - name: Deploy selected service
+          docker compose -f compose.yml build api
+          docker compose -f compose.yml push api
+      - name: Deploy API
         env:
-          SQL_CONNECTION_STRING: ${{ matrix.service == 'api' && secrets.SQL_CONNECTION_STRING || '' }}
-        run: python3 scripts/deploy-app.py "$SERVICE"
-      - name: Check revision readiness
+          IMAGE_NAME: ${{ env.API_IMAGE }}
+          SQL_CONNECTION_STRING: ${{ secrets.SQL_CONNECTION_STRING }}
+        run: python3 scripts/deploy-app.py api
+      - name: Check API readiness and capture URL
+        id: api_endpoint
         run: |
-          if [ "$SERVICE" = frontend ]; then app="$FRONTEND_APP"; else app="$API_APP"; fi
           for attempt in $(seq 1 60); do
-            state=$(az containerapp show -g "$RESOURCE_GROUP" -n "$app" --query properties.provisioningState -o tsv)
-            latest=$(az containerapp show -g "$RESOURCE_GROUP" -n "$app" --query properties.latestRevisionName -o tsv)
-            ready=$(az containerapp show -g "$RESOURCE_GROUP" -n "$app" --query properties.latestReadyRevisionName -o tsv)
+            state=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.provisioningState -o tsv)
+            latest=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.latestReadyRevisionName -o tsv)
+            if [ "$state" = Failed ]; then echo 'Azure provisioning failed'; exit 1; fi
+            if [ "$state" = Succeeded ] && [ -n "$latest" ] && [ "$latest" = "$ready" ]; then
+              fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" --query properties.configuration.ingress.fqdn -o tsv)
+              if [ -z "$fqdn" ]; then echo 'API ingress URL is missing'; exit 1; fi
+              echo "api_base_url=https://$fqdn" >> "$GITHUB_OUTPUT"
+              echo "Ready revision: $ready"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'API revision did not become ready; inspect Container Apps logs.'
+          exit 1
+      - name: Build and push frontend
+        run: |
+          docker compose -f compose.yml build frontend
+          docker compose -f compose.yml push frontend
+      - name: Deploy frontend
+        env:
+          IMAGE_NAME: ${{ env.FRONTEND_IMAGE }}
+          API_BASE_URL: ${{ steps.api_endpoint.outputs.api_base_url }}
+        run: python3 scripts/deploy-app.py frontend
+      - name: Check frontend readiness
+        run: |
+          for attempt in $(seq 1 60); do
+            state=$(az containerapp show -g "$RESOURCE_GROUP" -n "$FRONTEND_APP" --query properties.provisioningState -o tsv)
+            latest=$(az containerapp show -g "$RESOURCE_GROUP" -n "$FRONTEND_APP" --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show -g "$RESOURCE_GROUP" -n "$FRONTEND_APP" --query properties.latestReadyRevisionName -o tsv)
             if [ "$state" = Failed ]; then echo 'Azure provisioning failed'; exit 1; fi
             if [ "$state" = Succeeded ] && [ -n "$latest" ] && [ "$latest" = "$ready" ]; then
               echo "Ready revision: $ready"
@@ -64,6 +88,6 @@ jobs:
             fi
             sleep 10
           done
-          echo 'Revision did not become ready; inspect Container Apps logs.'
+          echo 'Frontend revision did not become ready; inspect Container Apps logs.'
           exit 1
       # Add application-specific HTTP tests and database checks; revision readiness is not functional testing.

@@ -1,11 +1,12 @@
-# Adjust these build directories to the student's actual solution layout.
-# The workflow sets IMAGE_NAME separately for each selected service.
+# Each service has an independent image name for local builds and CI pushes.
 services:
   frontend:
-    image: acrwp1f26c6f36039.azurecr.io/wp1/s09/frontend:0638f267ee3da94227d487fb16e9436302457f30
+    image: ${FRONTEND_IMAGE:-wp1-frontend:local}
     build: ./frontend
     ports: ["8080:8080"]
+    environment:
+      ApiBaseUrl: http://api:8080
   api:
-    image: acrwp1f26c6f36039.azurecr.io/wp1/s09/api:0638f267ee3da94227d487fb16e9436302457f30
+    image: ${API_IMAGE:-wp1-api:local}
     build: ./api
     ports: ["8081:8080"]
