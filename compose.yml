@@ -2,10 +2,10 @@
 # The workflow sets IMAGE_NAME separately for each selected service.
 services:
   frontend:
-    image: ${IMAGE_PREFIX:-wp1-frontend:local}
+    image: acrwp1f26c6f36039.azurecr.io/wp1/s09/frontend:0638f267ee3da94227d487fb16e9436302457f30
     build: ./frontend
     ports: ["8080:8080"]
   api:
-    image: ${IMAGE_PREFIX:-wp1-api:local}
+    image: acrwp1f26c6f36039.azurecr.io/wp1/s09/api:0638f267ee3da94227d487fb16e9436302457f30
     build: ./api
     ports: ["8081:8080"]
