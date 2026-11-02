@@ -1,0 +1,24 @@
+@baseUrl = http://localhost:8080
+
+### Create AuthMicroservice
+POST {{baseUrl}}/api/services
+Content-Type: application/json
+
+{
+  "serviceName": "AuthMicroservice",
+  "environment": "production",
+  "status": "active"
+}
+
+### Create testService
+POST {{baseUrl}}/api/services
+Content-Type: application/json
+
+{
+  "serviceName": "testService",
+  "environment": "environment",
+  "status": "active"
+}
+
+### Retrieve a service record by ID
+GET {{baseUrl}}/api/services/1

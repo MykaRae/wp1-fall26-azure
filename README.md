@@ -5,13 +5,13 @@
 This repository contains two separate .NET 10 applications:
 
 - `frontend` serves a small status page on port 8080. Its `/api/health` route forwards the request to the API.
-- `api` returns `{"status":"healthy"}` from `/health` on port 8080.
+- `api` returns `{"status":"healthy"}` from `/health` and supports creating PostgreSQL-backed service records at `POST /api/services`.
 
-The frontend uses the `ApiBaseUrl` configuration value. Docker Compose sets it to `http://api:8080`, where `api` is the Compose service name. When running the frontend outside Compose, it defaults to `http://localhost:8081`.
+The frontend uses the `ApiBaseUrl` configuration value. When running the frontend outside Compose, it defaults to `http://localhost:8081`.
 
 The GitHub Actions deployment builds and deploys the API first, waits for its revision, then gives the API's HTTPS URL to the frontend. The browser talks to the frontend only; the frontend server forwards the health check to the API.
 
-## Run with Docker Compose
+## Run the API and PostgreSQL with Docker Compose
 
 Start Docker Desktop, then run these commands from the repository root:
 
@@ -19,7 +19,9 @@ Start Docker Desktop, then run these commands from the repository root:
 docker compose up --build
 ```
 
-Open <http://localhost:8080> for the status page. The API is also available directly at <http://localhost:8081/health>.
+The API is available at <http://localhost:8080/health>. PostgreSQL 17 is available on port 5432, and its data is stored in the `pgdata` named volume. Compose waits for PostgreSQL's healthcheck to pass before starting the API.
+
+The Compose setup includes only the API and database. `POST /api/services` creates service records in PostgreSQL and returns `201 Created` with a URL for retrieving the created record. Set `POSTGRES_PASSWORD` in the environment to override the local development default.
 
 Stop the containers with `Ctrl+C`, then run:
 
@@ -27,4 +29,4 @@ Stop the containers with `Ctrl+C`, then run:
 docker compose down
 ```
 
-Both containers listen on port 8080 internally, matching the Azure Container Apps deployment configuration.
+The named database volume is retained when containers are stopped or removed. To discard the stored database data, run `docker compose down --volumes`.
