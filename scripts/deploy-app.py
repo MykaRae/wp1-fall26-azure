@@ -27,7 +27,7 @@ def main():
         env.append({'name':'ApiBaseUrl','value':e['API_BASE_URL']})
     if service=='api':
         secrets=[{'name':'db-connection','value':e['SQL_CONNECTION_STRING']}]
-        env.append({'name':'ConnectionStrings:DefaultConnection','secretRef':'db-connection'})
+        env.append({'name':'ConnectionStrings_DefaultConnection','secretRef':'db-connection'})
     # The browser uses the frontend's same-origin proxy; the API call is server-to-server.
     doc={'location':'eastus2','identity':{'type':'UserAssigned','userAssignedIdentities':{identity:{}}},
       'properties':{'environmentId':base+'/providers/Microsoft.App/managedEnvironments/'+e['CONTAINER_ENVIRONMENT'],
