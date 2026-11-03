@@ -23,7 +23,7 @@ The API is available at <http://localhost:8080/health>. PostgreSQL 17 is availab
 
 The Compose setup includes only the API and PostgreSQL. `POST /api/services` creates records in the local PostgreSQL database and returns `201 Created` with a URL for retrieving the record. Set `POSTGRES_PASSWORD` in the environment to override the local development default.
 
-In Azure, the API uses the SQL Server connection string provided as `ConnectionStrings__DefaultConnection`; configure the GitHub `SQL_CONNECTION_STRING` secret with a SQL Server/Azure SQL connection string. The API creates `dbo.service_records` at startup, so the SQL login must be permitted to create tables. Local PostgreSQL records are not automatically copied to Azure SQL.
+In Azure, the API uses the SQL Server connection string provided as `ConnectionStrings__DefaultConnection`; configure the GitHub `SQL_CONNECTION_STRING` secret with a SQL Server/Azure SQL connection string. Before deploying, connect to the target database in SSMS and run [`api/sql/azure-service-records.sql`](./api/sql/azure-service-records.sql) using an account that can create tables. The API does not create the Azure SQL table during startup, so its runtime login does not need schema permissions. Grant that login `SELECT` and `INSERT` on `dbo.service_records` so the API's GET and POST endpoints work. Local PostgreSQL records are not automatically copied to Azure SQL.
 
 Stop the containers with `Ctrl+C`, then run:
 

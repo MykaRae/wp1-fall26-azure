@@ -66,31 +66,22 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-await using (var connection = await connectionFactory.OpenConnectionAsync(CancellationToken.None))
-await using (var command = connection.CreateCommand())
+// Local PostgreSQL is provisioned automatically. Azure SQL schema is installed separately
+// with api/sql/azure-service-records.sql so the runtime login needs no DDL permissions.
+if (!usesSqlServer)
 {
-    command.CommandText = usesSqlServer
-        ? """
-          IF OBJECT_ID(N'dbo.service_records', N'U') IS NULL
-          BEGIN
-              CREATE TABLE dbo.service_records (
-                  id BIGINT IDENTITY(1,1) PRIMARY KEY,
-                  service_name VARCHAR(200) NOT NULL,
-                  environment VARCHAR(100) NOT NULL,
-                  status VARCHAR(100) NOT NULL,
-                  created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
-              );
-          END;
-          """
-        : """
-          CREATE TABLE IF NOT EXISTS service_records (
-              id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-              service_name VARCHAR(200) NOT NULL,
-              environment VARCHAR(100) NOT NULL,
-              status VARCHAR(100) NOT NULL,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-          """;
+    await using var connection = await connectionFactory.OpenConnectionAsync(CancellationToken.None);
+    await using var command = connection.CreateCommand();
+    command.CommandText =
+        """
+        CREATE TABLE IF NOT EXISTS service_records (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            service_name VARCHAR(200) NOT NULL,
+            environment VARCHAR(100) NOT NULL,
+            status VARCHAR(100) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """;
     await command.ExecuteNonQueryAsync();
 }
 
