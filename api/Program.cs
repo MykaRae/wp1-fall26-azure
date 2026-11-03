@@ -4,16 +4,32 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
-var database = builder.Configuration.GetSection("Database");
-var dbHost = database["Host"] ?? throw new InvalidOperationException("Database:Host is required.");
-var connectionString = new NpgsqlConnectionStringBuilder
+var configuredConnectionString =
+    builder.Configuration.GetConnectionString("DefaultConnection");
+
+NpgsqlConnectionStringBuilder connectionSettings;
+
+if (!string.IsNullOrWhiteSpace(configuredConnectionString))
 {
-    Host = dbHost,
-    Port = database.GetValue("Port", 5432),
-    Database = database["Name"] ?? throw new InvalidOperationException("Database:Name is required."),
-    Username = database["Username"] ?? throw new InvalidOperationException("Database:Username is required."),
-    Password = database["Password"] ?? throw new InvalidOperationException("Database:Password is required.")
-}.ConnectionString;
+    // Azure provides ConnectionStrings__DefaultConnection.
+    connectionSettings = new NpgsqlConnectionStringBuilder(configuredConnectionString);
+}
+else
+{
+    // Local Compose provides separate Database__* settings.
+    var database = builder.Configuration.GetSection("Database");
+    connectionSettings = new NpgsqlConnectionStringBuilder
+    {
+        Host = database["Host"] ?? throw new InvalidOperationException("Database:Host is required."),
+        Port = database.GetValue("Port", 5432),
+        Database = database["Name"] ?? throw new InvalidOperationException("Database:Name is required."),
+        Username = database["Username"] ?? throw new InvalidOperationException("Database:Username is required."),
+        Password = database["Password"] ?? throw new InvalidOperationException("Database:Password is required.")
+    };
+}
+
+var connectionString = connectionSettings.ConnectionString;
+var dbHost = connectionSettings.Host;
 
 var dataSource = NpgsqlDataSource.Create(connectionString);
 builder.Services.AddSingleton(dataSource);
