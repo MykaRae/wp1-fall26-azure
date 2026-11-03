@@ -1,10 +1,10 @@
+using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
-using Npgsql;
 
 public sealed class ServiceRecordService(
-    NpgsqlDataSource dataSource,
-    ILogger<ServiceRecordService> logger,
-    string dbHost) : IServiceRecordService
+    DatabaseConnectionFactory connectionFactory,
+    ILogger<ServiceRecordService> logger) : IServiceRecordService
 {
     public async Task<ServiceRecordResponse> CreateAsync(
         CreateServiceRecordRequest request,
@@ -12,24 +12,31 @@ public sealed class ServiceRecordService(
     {
         var stopwatch = Stopwatch.StartNew();
 
-        logger.LogDebug("Renting connection from pool for host {DbHost}", dbHost);
+        logger.LogDebug("Renting connection from pool for host {DbHost}", connectionFactory.Host);
 
         try
         {
-            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-            await using var command = new NpgsqlCommand(
-                """
-                INSERT INTO service_records (service_name, environment, status)
-                VALUES (@service_name, @environment, @status)
-                RETURNING id, service_name, environment, status, created_at;
-                """,
-                connection);
-            command.Parameters.AddWithValue("service_name", request.ServiceName.Trim());
-            command.Parameters.AddWithValue("environment", request.Environment.Trim());
-            command.Parameters.AddWithValue("status", request.Status.Trim());
+            await using var connection = await connectionFactory.OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = connectionFactory.UsesSqlServer
+                ? """
+                  INSERT INTO dbo.service_records (service_name, environment, status)
+                  OUTPUT INSERTED.id, INSERTED.service_name, INSERTED.environment,
+                         INSERTED.status, INSERTED.created_at
+                  VALUES (@service_name, @environment, @status);
+                  """
+                : """
+                  INSERT INTO service_records (service_name, environment, status)
+                  VALUES (@service_name, @environment, @status)
+                  RETURNING id, service_name, environment, status, created_at;
+                  """;
+            AddParameter(command, "@service_name", request.ServiceName.Trim(), DbType.String);
+            AddParameter(command, "@environment", request.Environment.Trim(), DbType.String);
+            AddParameter(command, "@status", request.Status.Trim(), DbType.String);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            await reader.ReadAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+                throw new InvalidOperationException("The database insert returned no service record.");
             var record = ReadResponse(reader);
 
             stopwatch.Stop();
@@ -49,13 +56,13 @@ public sealed class ServiceRecordService(
 
             return record;
         }
-        catch (NpgsqlException exception)
+        catch (DbException exception)
         {
             stopwatch.Stop();
             logger.LogError(
                 exception,
                 "Database operation failed against {DbHost} for service {ServiceName}",
-                dbHost,
+                connectionFactory.Host,
                 request.ServiceName);
             throw;
         }
@@ -63,21 +70,35 @@ public sealed class ServiceRecordService(
 
     public async Task<ServiceRecordResponse?> GetByIdAsync(long id, CancellationToken cancellationToken)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(
-            """
-            SELECT id, service_name, environment, status, created_at
-            FROM service_records
-            WHERE id = @id;
-            """,
-            connection);
-        command.Parameters.AddWithValue("id", id);
+        await using var connection = await connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = connectionFactory.UsesSqlServer
+            ? """
+              SELECT id, service_name, environment, status, created_at
+              FROM dbo.service_records
+              WHERE id = @id;
+              """
+            : """
+              SELECT id, service_name, environment, status, created_at
+              FROM service_records
+              WHERE id = @id;
+              """;
+        AddParameter(command, "@id", id, DbType.Int64);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader) : null;
     }
 
-    private static ServiceRecordResponse ReadResponse(NpgsqlDataReader reader) =>
+    private static void AddParameter(DbCommand command, string name, object value, DbType type)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.DbType = type;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+
+    private static ServiceRecordResponse ReadResponse(DbDataReader reader) =>
         new(
             reader.GetInt64(0),
             reader.GetString(1),
