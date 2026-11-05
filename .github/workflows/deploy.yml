@@ -75,8 +75,8 @@ jobs:
           exit 1
       - name: Build and push frontend
         run: |
-          docker compose -f compose.yml build frontend
-          docker compose -f compose.yml push frontend
+          docker build --file frontend/Dockerfile --tag "$FRONTEND_IMAGE" frontend
+          docker push "$FRONTEND_IMAGE"
       - name: Deploy frontend
         env:
           IMAGE_NAME: ${{ env.FRONTEND_IMAGE }}
